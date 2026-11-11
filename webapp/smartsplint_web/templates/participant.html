@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}{{ pid }} · Smart Splint{% endblock %}
+{% block pid %}{{ pid }}{% endblock %}
+{% block estop %}{% include "_estop.html" %}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <div class="crumbs"><a href="{{ url_for('pages.roster') }}">Participants</a> /</div>
+    <h1>{{ pid }}</h1>
+    <p class="sub" id="head-sub"></p>
+  </div>
+  <div class="form-actions">
+    <a class="button small" href="/api/participants/{{ pid }}/sessions.csv">Export sessions (CSV)</a>
+  </div>
+</div>
+
+<div id="consent-warning"></div>
+
+<div class="split">
+  <section class="card" aria-labelledby="settings-h">
+    <h2 id="settings-h">Support and limits</h2>
+    <p class="muted small">Changes are logged with your username and sent to the brace the next time it syncs.</p>
+    <form id="settings" class="grid" autocomplete="off"></form>
+  </section>
+  <section class="card card-section" aria-labelledby="alerts-h">
+    <header><h2 id="alerts-h">Open alerts</h2><button type="button" class="small" id="ack-all" hidden>Acknowledge all</button></header>
+    <ul class="events" id="open-alerts"></ul>
+  </section>
+</div>
+
+<section class="section">
+  <header>
+    <h2>Progress</h2>
+    <div class="segmented" role="group" aria-label="Date range" id="range">
+      <button type="button" data-days="7">7 days</button>
+      <button type="button" data-days="14">14 days</button>
+      <button type="button" data-days="30">30 days</button>
+      <button type="button" data-days="0" aria-pressed="true">All</button>
+    </div>
+  </header>
+  <div class="grid cols-3" id="progress"></div>
+</section>
+
+<section class="section">
+  <header><h2>Sessions</h2><p>Select a session to see its recorded signals</p></header>
+  <div class="card table-wrap"><table id="sessions"></table></div>
+</section>
+
+<section class="section">
+  <header>
+    <h2>Event log</h2>
+    <div class="segmented" role="group" aria-label="Event type" id="log-filter">
+      <button type="button" data-cat="" aria-pressed="true">All</button>
+      <button type="button" data-cat="safety">Safety</button>
+      <button type="button" data-cat="anomaly">Gait alerts</button>
+      <button type="button" data-cat="config">Changes</button>
+    </div>
+  </header>
+  <div class="card"><ul class="events" id="log"></ul></div>
+</section>
+
+<section class="section">
+  <header><h2>Data</h2></header>
+  <div class="card grid">
+    <p class="secondary small">Deleting data removes every session, recording and event for {{ pid }} and withdraws consent (FR-12). Removing the participant also deletes their login and paired braces.</p>
+    <div class="form-actions">
+      <button type="button" class="small danger" data-delete="data">Delete participant data</button>
+      <button type="button" class="small danger" data-delete="participant">Remove participant</button>
+    </div>
+  </div>
+</section>
+{% endblock %}
+{% block scripts %}<script type="module" src="{{ url_for('static', filename='js/participant.js') }}"></script>{% endblock %}

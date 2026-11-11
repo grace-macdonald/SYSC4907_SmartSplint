@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}My progress · Smart Splint{% endblock %}
+{% block pid %}{{ pid }}{% endblock %}
+{% block estop %}{% include "_estop.html" %}{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Your recovery</h1>
+    <p class="sub">Participant {{ pid }}</p>
+  </div>
+  <button type="button" class="small" id="notify-btn" hidden>Turn on alert notifications</button>
+</div>
+
+<section class="card" id="hero" aria-live="polite"></section>
+
+<section class="section">
+  <header><h2>This week</h2><p>Compared with the week before</p></header>
+  <div class="grid tiles" id="tiles"></div>
+</section>
+
+<section class="section">
+  <header><h2>Alerts</h2><p>Things the brace noticed while you walked</p></header>
+  <div class="card"><ul class="events" id="alerts"></ul></div>
+</section>
+
+<section class="section">
+  <header><h2>How you're progressing</h2><p>Each point is one walking session</p></header>
+  <div class="grid cols-2" id="progress"></div>
+</section>
+
+<section class="section">
+  <header><h2>Recent sessions</h2></header>
+  <div class="card table-wrap"><table id="sessions"></table></div>
+</section>
+
+<section class="section" id="privacy">
+  <header><h2>Your data</h2></header>
+  <div class="card grid">
+    <p class="secondary" id="consent-line"></p>
+    <div class="form-actions">
+      <a class="button small" href="/api/participants/{{ pid }}/sessions.csv">Download my session summary (CSV)</a>
+      <button type="button" class="small danger" id="delete-btn">Delete all my data</button>
+    </div>
+  </div>
+</section>
+
+<dialog id="delete-dialog">
+  <form method="dialog">
+    <h2>Delete all your data?</h2>
+    <p>This permanently deletes every session, sensor recording and alert stored for {{ pid }}, and withdraws your consent. The brace will stop uploading until you give consent again. This can't be undone.</p>
+    <label class="field">Type your participant ID to confirm
+      <input type="text" id="delete-confirm" autocomplete="off" autocapitalize="characters">
+    </label>
+    <div class="form-actions">
+      <button value="cancel" formnovalidate>Cancel</button>
+      <button value="confirm" class="danger" id="delete-go" disabled>Delete everything</button>
+    </div>
+  </form>
+</dialog>
+{% endblock %}
+{% block scripts %}<script type="module" src="{{ url_for('static', filename='js/patient.js') }}"></script>{% endblock %}

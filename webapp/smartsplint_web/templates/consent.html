@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Consent · Smart Splint{% endblock %}
+{% block main_class %}narrow{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Before we store any data</h1>
+    <p class="sub">Participant {{ participant['id'] }}</p>
+  </div>
+</div>
+<form class="card consent-body" method="post">
+  <p>The Smart Splint brace records how you walk so you and your care team can see how your ankle is recovering. Nothing is stored until you agree below.</p>
+  <h2>What is recorded</h2>
+  <ul>
+    <li>Pressure under your foot (heel, inner and outer forefoot, toes).</li>
+    <li>Calf muscle activity (EMG), ankle angle, and motion of your foot and lower leg.</li>
+    <li>The support the brace gave you, and alerts such as toe walking or toe dragging.</li>
+  </ul>
+  <h2>How it is protected</h2>
+  <ul>
+    <li>Your data is stored under your participant ID only. Your name is never stored in this system.</li>
+    <li>Only you and the research team can see it.</li>
+    <li>Data is deleted automatically after {{ (retention_days / 30.4) | round | int }} months.</li>
+    <li>You can delete all of your data at any time from the "Your data" section of your progress page.</li>
+  </ul>
+  <label class="check">
+    <input type="checkbox" name="agree" value="yes" required>
+    <span>I have read the information above and I agree to my walking data being stored and used for this study. <span class="muted small">(Consent form version {{ consent_version }})</span></span>
+  </label>
+  <div class="form-actions"><button class="primary" type="submit">Give consent</button></div>
+</form>
+{% endblock %}

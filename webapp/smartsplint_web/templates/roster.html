@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Participants · Smart Splint{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Participants</h1>
+    <p class="sub">Identified by participant ID only. The ID-to-name list is kept by the study team, outside this system.</p>
+  </div>
+  <button class="primary" type="button" id="add-btn">Add participant</button>
+</div>
+
+<div class="grid tiles" id="summary"></div>
+
+<section class="section">
+  <div class="card table-wrap"><table id="roster"></table></div>
+</section>
+
+<dialog id="add-dialog">
+  <form method="dialog" id="add-form">
+    <h2>Add participant</h2>
+    <p>A participant ID and a temporary password are generated. Give the password to the participant; it is shown only once.</p>
+    <label class="field">Body mass (kg)
+      <input type="number" name="mass" min="20" max="250" step="0.1" placeholder="Optional, can be set later">
+    </label>
+    <div class="form-actions">
+      <button value="cancel" formnovalidate>Cancel</button>
+      <button value="create" class="primary">Create</button>
+    </div>
+  </form>
+  <div id="add-result" hidden>
+    <h2>Participant created</h2>
+    <p>Participant ID</p><p class="secret" id="new-pid"></p>
+    <p>Temporary password</p><p class="secret" id="new-pass"></p>
+    <p class="small">To pair a brace, run <code>flask --app smartsplint_web create-device <span id="new-pid-2"></span></code> on the server.</p>
+    <div class="form-actions"><button type="button" id="add-done" class="primary">Done</button></div>
+  </div>
+</dialog>
+{% endblock %}
+{% block scripts %}<script type="module" src="{{ url_for('static', filename='js/roster.js') }}"></script>{% endblock %}

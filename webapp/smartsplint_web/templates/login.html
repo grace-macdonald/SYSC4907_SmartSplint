@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Sign in · Smart Splint{% endblock %}
+{% block body %}
+<div class="auth">
+  <form class="card" method="post">
+    <div class="brand"><span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 16 16" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 2v7l-2 4h9"/><path d="M5 9h4"/></svg></span>Smart Splint</div>
+    <div>
+      <h1>Sign in</h1>
+      <p class="secondary small">Participants sign in with their participant ID. Clinicians and researchers use their username.</p>
+    </div>
+    {% with messages = get_flashed_messages() %}
+      {% for m in messages %}<div class="notice critical" role="alert">{{ m }}</div>{% endfor %}
+    {% endwith %}
+    <label class="field">Participant ID or username
+      <input type="text" name="username" autocomplete="username" autocapitalize="characters" required autofocus>
+    </label>
+    <label class="field">Password
+      <input type="password" name="password" autocomplete="current-password" required>
+    </label>
+    <button class="primary" type="submit">Sign in</button>
+  </form>
+</div>
+{% endblock %}
