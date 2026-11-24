@@ -28,6 +28,17 @@ def _require_consent():
     return p
 
 
+def _run_checks(sid: int) -> int:
+    """Run the FootAnomaly toe-walking check on the session's raw insole samples.
+
+    Add ?detect=0 when the uploader already posts its own toe_walking events
+    (e.g. relaying the board's '# TOE WALKING DETECTED' lines), to avoid duplicates.
+    """
+    if request.args.get("detect") == "0":
+        return 0
+    return service.record_toe_walking(sid)
+
+
 def _json_body() -> dict:
     body = request.get_json(silent=True)
     if not isinstance(body, dict):
@@ -71,8 +82,9 @@ def create_session():
     )
     sid = cur.lastrowid
     n = service.insert_samples(sid, body.get("samples") or [])
+    flagged = _run_checks(sid) if n else 0
     db.commit()
-    return jsonify(session_id=sid, samples_stored=n), 201
+    return jsonify(session_id=sid, samples_stored=n, toe_walking_events=flagged), 201
 
 
 @bp.patch("/sessions/<int:sid>")
@@ -105,8 +117,9 @@ def append_samples(sid):
     if not isinstance(samples, list):
         raise service.ValidationError("samples must be a list.")
     n = service.insert_samples(sid, samples)
+    flagged = _run_checks(sid) if n else 0
     get_db().commit()
-    return jsonify(samples_stored=n), 201
+    return jsonify(samples_stored=n, toe_walking_events=flagged), 201
 
 
 @bp.post("/events")

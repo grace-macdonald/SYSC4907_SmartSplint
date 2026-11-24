@@ -67,7 +67,7 @@ export function lineChart(container, opts) {
     const multi = opts.series.length > 1;
     const endLabels = multi && opts.series.length <= 4 && opts.endLabels !== false;
     // A fixed right margin keeps stacked charts aligned on the same x positions.
-    const m = { top: 8 + bandH + (bandH ? 6 : 0), right: opts.marginRight ?? (endLabels ? 74 : 14), bottom: 22, left: 40 };
+    const m = { top: 8 + bandH + (bandH ? 6 : 0), right: opts.marginRight ?? (endLabels ? 74 : 14), bottom: opts.hideXTicks ? 6 : 22, left: 40 };
     const iw = Math.max(10, W - m.left - m.right);
     const ih = H - m.top - m.bottom;
 
@@ -94,9 +94,11 @@ export function lineChart(container, opts) {
       svg.append(lab);
     }
 
-    // x ticks
+    // x ticks (stacked charts can hide theirs and let the bottom chart carry the axis)
     const nX = Math.max(2, Math.min(6, Math.floor(iw / 90)));
-    if (opts.xType === "time") {
+    if (opts.hideXTicks) {
+      // nothing
+    } else if (opts.xType === "time") {
       const DAY = 86400000;
       const days = (x1 - x0) / DAY;
       const want = Math.max(1, nX);
@@ -131,12 +133,26 @@ export function lineChart(container, opts) {
       svg.append(g);
     }
 
+    // flagged spans (e.g. toe-walking windows): a full-height critical wash behind the data
+    for (const sp of opts.spans || []) {
+      const a = Math.max(x0, sp.x0), b = Math.min(x1, sp.x1);
+      if (b <= a) continue;
+      svg.append(s("rect", { x: sx(a), y: m.top, width: sx(b) - sx(a), height: ih, fill: "var(--critical-wash)" }));
+      if (sp.label) {
+        const lab = s("text", { class: "span-label", x: sx(a) + 4, y: m.top + 11 });
+        lab.textContent = sp.label;
+        svg.append(lab);
+      }
+    }
+
     // thresholds (limits) - solid, status-coloured, labelled
     for (const t of opts.thresholds || []) {
       if (t.y === null || t.y === undefined || t.y < lo || t.y > hi) continue;
       const color = t.status === "critical" ? "var(--critical)" : t.status === "warning" ? "var(--warning)" : "var(--ink-2)";
       svg.append(s("line", { class: "threshold", x1: m.left, x2: m.left + iw, y1: sy(t.y), y2: sy(t.y), stroke: color }));
-      const lab = s("text", { class: "threshold-label", x: m.left + iw - 2, y: sy(t.y) - 4, "text-anchor": "end" });
+      const lab = opts.thresholdLabelsOutside
+        ? s("text", { class: "threshold-label", x: m.left + iw + 6, y: sy(t.y) + 3.5 })
+        : s("text", { class: "threshold-label", x: m.left + iw - 2, y: sy(t.y) - 4, "text-anchor": "end" });
       lab.textContent = t.label;
       svg.append(lab);
     }

@@ -71,13 +71,18 @@ CREATE INDEX IF NOT EXISTS idx_sessions_participant ON sessions(participant_id, 
 
 -- Time-synchronised samples on a common clock (FR-2, NFR-11). NULL in a
 -- sensor column marks a missing reading; valid = 0 marks an invalid frame.
+-- FSR columns are raw 12-bit ADC counts (0-4095), numbered as on the foot map
+-- (see domain.FSR_SENSORS): 1 big toe, 2 1st metatarsal, 3 2nd/3rd metatarsal,
+-- 4 5th metatarsal, 5 heel, 6 reserved for the sixth sensor.
 CREATE TABLE IF NOT EXISTS samples (
     session_id        INTEGER NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
     t_ms              INTEGER NOT NULL,
-    fsr_heel          REAL,
-    fsr_medial        REAL,
-    fsr_lateral       REAL,
-    fsr_toe           REAL,
+    fsr1              INTEGER,
+    fsr2              INTEGER,
+    fsr3              INTEGER,
+    fsr4              INTEGER,
+    fsr5              INTEGER,
+    fsr6              INTEGER,
     emg               REAL,
     imu_foot_pitch    REAL,
     imu_foot_gyro     REAL,

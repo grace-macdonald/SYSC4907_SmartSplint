@@ -43,6 +43,8 @@ function renderTiles() {
     const err = s.reference_torque_nm ? (100 * (s.push_off_torque_nm - s.reference_torque_nm)) / s.reference_torque_nm : null;
     tiles.push(["Measured push-off torque", `${fmt.num(s.push_off_torque_nm, 1)} N·m`, err === null ? null : `${err > 0 ? "+" : ""}${fmt.num(err, 1)}% vs requested`]);
   }
+  const fc = data.foot_check;
+  if (fc.windows) tiles.push(["Toe-walking check", `${fc.toe_walking} of ${fc.windows}`, `${fc.window_s} s windows flagged`]);
   if (s.peak_plantar_load_kg !== null) tiles.push(["Peak foot load", `${fmt.num(s.peak_plantar_load_kg, 1)} kg`, participant.weight_bearing_limit_kg ? `limit ${participant.weight_bearing_limit_kg} kg` : null]);
   if (!isPatient && s.model_confidence_mean !== null) tiles.push(["Gait model confidence", fmt.num(s.model_confidence_mean, 2), s.assist_active_pct !== null ? `${fmt.num(s.assist_active_pct)}% of strides assisted` : null]);
   clear(document.getElementById("tiles"), tiles.map(([label, value, note]) => h("div", { class: "card tile" },
@@ -133,16 +135,11 @@ function renderSignals() {
   const s = data.session;
   const p = participant;
 
+  const box = document.getElementById("signals");
+  clear(box);
+  renderInsole(box, shifted, xDomain, bands, pts);
+
   const defs = [
-    {
-      title: "Plantar force", desc: "Insole regions, uncalibrated units (force pattern only)", unit: "", digits: 2, yZero: true,
-      series: [
-        { name: "Heel", key: "fsr_heel", color: "var(--series-1)" },
-        { name: "Medial forefoot", short: "Medial", key: "fsr_medial", color: "var(--series-2)" },
-        { name: "Lateral edge", short: "Lateral", key: "fsr_lateral", color: "var(--series-3)" },
-        { name: "Toes", key: "fsr_toe", color: "var(--series-4)" },
-      ],
-    },
     {
       title: "Ankle angle", desc: "Hinge potentiometer; dorsiflexion positive", unit: "°", digits: 1,
       series: [{ name: "Ankle angle", key: "ankle_angle_deg", color: "var(--series-1)" }],
@@ -175,12 +172,9 @@ function renderSignals() {
     });
   }
 
-  const box = document.getElementById("signals");
-  clear(box);
-  defs.forEach((def, i) => {
+  defs.forEach((def) => {
     const body = h("div");
     const items = def.series.length > 1 ? def.series.map((se) => ({ name: se.name, color: se.color })) : [];
-    if (i === 0) items.push(...Object.entries(PHASE_COLOR).map(([k, c]) => ({ name: `${PHASE_LABEL[k]} phase`, color: c, box: true })));
     box.append(h("article", { class: "card chart-card" },
       h("header", {}, h("div", {}, h("h3", {}, def.title), h("p", { class: "desc" }, def.desc))),
       body,
@@ -194,9 +188,74 @@ function renderSignals() {
       yZero: def.yZero,
       unit: def.unit,
       digits: def.digits,
-      height: i === 0 ? 190 : 150,
+      height: 150,
       thresholds: def.thresholds,
       bands,
+      tooltipTitle: (pt) => `${fmt.num(pt.x, 2)} s`,
+      syncGroup: "signals",
+      marginRight: 74,
+    }));
+  });
+}
+
+// Plantar pressure: one small chart per FSR, stacked like FootAnomaly/plot_fsr.py,
+// on the raw 0-4095 ADC scale with the contact threshold and flagged windows.
+const FSR_COLORS = ["var(--series-1)", "var(--series-2)", "var(--series-3)", "var(--series-4)", "var(--series-5)",
+  "var(--ink-2)"];
+
+function renderInsole(box, shifted, xDomain, bands, pts) {
+  const ins = data.insole;
+  const fc = data.foot_check;
+  const sensors = ins.sensors.filter((se) => shifted.some((s) => s[se.key] !== null && s[se.key] !== undefined));
+  if (!sensors.length) return;
+  const spans = fc.flagged.map((w) => ({ x0: w.start_ms / 1000, x1: w.end_ms / 1000, label: "Toe walking" }));
+  const heel = ins.sensors.find((se) => se.key === ins.heel_sensor);
+  const verdict = fc.windows === 0
+    ? "Recording is shorter than one check window."
+    : fc.toe_walking
+      ? `${fc.toe_walking} of ${fc.windows} windows flagged: the foot was loaded but the heel (${heel?.label}) never passed ${ins.contact_on}.`
+      : `No toe walking: the heel (${heel?.label}) made contact in every loaded window (${fc.windows} windows).`;
+
+  const stack = h("div", { class: "insole" });
+  const items = [
+    ...Object.entries(PHASE_COLOR).map(([k, c]) => ({ name: `${PHASE_LABEL[k]} phase`, color: c, box: true })),
+  ];
+  const legendRow = legend(items);
+  if (fc.toe_walking) {
+    const sw = h("i", { class: "box" });
+    sw.style.background = "var(--critical-wash)";
+    sw.style.outline = "1px solid var(--critical)";
+    legendRow.append(h("span", {}, sw, `Toe-walking window (${fc.window_s} s check)`));
+  }
+  box.append(h("article", { class: "card chart-card" },
+    h("header", {}, h("div", {},
+      h("h3", {}, "Plantar pressure"),
+      h("p", { class: "desc" }, `${sensors.length} FSRs, raw ADC (0–${ins.adc_max}). Line = contact threshold (on above ${ins.contact_on}, off below ${ins.contact_off}).`))),
+    h("div", { class: `notice ${fc.toe_walking ? "warning" : ""}` }, verdict),
+    stack,
+    legendRow));
+
+  sensors.forEach((se, i) => {
+    const sw = h("i");
+    sw.style.background = FSR_COLORS[ins.sensors.indexOf(se)] || "var(--ink-2)";
+    stack.append(h("div", { class: "sensor-label" }, sw, h("b", {}, se.label), se.location));
+    const body = h("div");
+    stack.append(body);
+    const last = i === sensors.length - 1;
+    charts.push(lineChart(body, {
+      title: `${se.label} ${se.location}`,
+      series: [{ name: `${se.label} ${se.location}`, color: FSR_COLORS[ins.sensors.indexOf(se)], points: pts(se.key, last), markers: false }],
+      xType: "seconds",
+      xDomain,
+      yDomain: [0, ins.adc_max],
+      unit: "ADC",
+      digits: 0,
+      height: (last ? 92 : 70) + (i === 0 ? 18 : 0),   // the first chart also carries the phase strip
+      hideXTicks: !last,
+      thresholds: [{ y: ins.contact_on, label: `Contact ${ins.contact_on}`, status: "neutral" }],
+      thresholdLabelsOutside: true,
+      bands: i === 0 ? bands : undefined,
+      spans: spans.map((sp) => ({ ...sp, label: i === 0 ? sp.label : "" })),
       tooltipTitle: (pt) => `${fmt.num(pt.x, 2)} s`,
       syncGroup: "signals",
       marginRight: 74,

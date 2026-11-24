@@ -34,7 +34,10 @@ The demo data is synthetic. Use `init-demo --reset` to start over, or skip `init
 flask --app smartsplint_web create-clinician <username>
 flask --app smartsplint_web create-participant --mass 72.5   # prints the ID and a temporary password
 flask --app smartsplint_web create-device P-006              # prints the brace's ingest token (shown once)
+flask --app smartsplint_web import-fsr-csv P-006 data/P01_walk1_raw.csv --started-at 2026-11-20T14:05
 ```
+
+The last command imports a recording saved by `FootAnomaly/plot_fsr.py live`. It creates a session and runs the toe-walking check on it (see "Insole and toe-walking check" below).
 
 Run the tests with `python -m pytest tests`.
 
@@ -46,7 +49,7 @@ Run the tests with `python -m pytest tests`.
 | FR-6 / P8: 100% = mass × 0.61 N·m/kg, capped at the safe motor torque, levels 0–100% in 5% steps | `domain.py`. Validated in `service.update_settings`. Shown live in the clinician settings form. |
 | Section 1.11: clinician-set weight-bearing and ROM limits that can only tighten the hard stops (NFR-3) | Participant settings. ROM values above 25° plantarflexion or 15° dorsiflexion are rejected. |
 | Table 3: the app only changes support within clinician limits and never starts motion | Only clinicians can change settings. The level can't exceed the participant's maximum. Every change is logged with who made it. |
-| P9 / FR-9: toe walking, toe dragging and stride variation, with notification within 5 s | `POST /api/ingest/events`. Pages poll every 3 s and show a toast or system notification. |
+| P9 / FR-9: toe walking, toe dragging and stride variation, with notification within 5 s | Toe walking is detected on the server from the raw insole samples (`foot_anomaly.py`). Other alerts arrive through `POST /api/ingest/events`. Pages poll every 3 s and show a toast or system notification. |
 | FR-11: safe-state entries (watchdog, sensor dropout, stale prediction, low battery, comm loss, over-temperature, plantar overload) | Event type `safety`. Shown as critical and listed first for clinicians. |
 | P10 / section 1.7: e-stop in the app | **Stop brace** button: Web Bluetooth write, then logged as a critical event. |
 | FR-12 / P12: consent before storage, deletion on request | Participants must consent before the ingest API accepts anything (it returns 403 otherwise). **Delete all my data** removes everything and withdraws consent. |
@@ -77,7 +80,7 @@ PATCH /api/ingest/sessions/<id>          # fill in ended_at / summary metrics la
 POST  /api/ingest/sessions/<id>/samples  { "samples": [ ... ] }   # append in chunks
 
 # one sample (all sensor fields optional; null = missing reading)
-{ "t_ms": 1234, "fsr_heel": 0.8, "fsr_medial": 0.1, "fsr_lateral": 0.3, "fsr_toe": 0.0, "emg": 0.42,
+{ "t_ms": 1234, "fsr1": 2210, "fsr2": 1890, "fsr3": 1500, "fsr4": 900, "fsr5": 140, "emg": 0.42,
   "imu_foot_pitch": 4.1, "imu_foot_gyro": 120, "imu_shank_pitch": -3.0, "imu_shank_gyro": 80,
   "ankle_angle_deg": 6.2, "hinge_torque_nm": 0.0, "gait_phase": "stance" | "push_off" | "swing" | null,
   "phase_confidence": 0.93, "valid": 1 }
@@ -93,6 +96,31 @@ The event types are listed in `domain.EVENT_TYPES`:
 - **Safety:** `hardware_estop`, `app_estop`, `watchdog_timeout`, `sensor_dropout`, `stale_prediction`, `low_battery`, `comm_loss`, `over_temperature`, `plantar_overload`, `torque_limit`.
 
 Severity comes from that catalogue.
+
+## Insole and toe-walking check
+
+The insole values match `FootAnomaly/` on the `dev-footanomaly` branch (`five_fsr_toe_walking.ino` and `plot_fsr.py`). They live in `domain.py`.
+
+| Setting | Value |
+|---|---|
+| Sensors | `fsr1` big toe, `fsr2` 1st metatarsal, `fsr3` 2nd/3rd metatarsal, `fsr4` 5th metatarsal, `fsr5` heel |
+| Units | Raw 12-bit ADC counts, 0–4095. The ingest API rejects anything else. |
+| Contact | Hysteresis: contact starts above **480** and ends below **320** |
+| Toe-walking window | **5 s** |
+
+`foot_anomaly.py` is a direct port of `HeelCheck` from `plot_fsr.py`. Every time raw samples are uploaded, it runs over the session and logs a `toe_walking` event for each 5 s window where the foot was loaded but the heel (FSR5) never made contact.
+
+- The check is idempotent, so samples can arrive in chunks without creating duplicate events.
+- If the uploader already relays the board's own `# TOE WALKING DETECTED` lines as events, add `?detect=0` to the upload so the same window isn't logged twice.
+- On the demo data, this check and `plot_fsr.py replay` flag exactly the same windows.
+
+As in `plot_fsr.py`, the sample that closes a window still counts toward that window. So a heel strike landing exactly on the 5 s boundary clears the window.
+
+The session viewer shows each FSR in its own chart, stacked like the plotter. Each chart has the contact threshold line, and flagged windows are shaded.
+
+**Adding the 6th FSR:**
+1. Append it to `domain.FSR_SENSORS`. The `samples` table already has an `fsr6` column, so ingest, storage, CSV export and the charts pick it up.
+2. Decide whether the new sensor counts as "heel" in the toe-walking rule.
 
 ## Configuration
 
@@ -129,4 +157,6 @@ The app is ready for team testing. Before it holds data from anyone outside the 
 - **Plantar load in kg.** The proposal says the FSRs won't be calibrated, but the weight-bearing limit needs a load estimate. The app stores whatever kg estimate the pipeline sends.
 - **Where summary metrics are computed.** They could be computed on the brace, on the phone or in the cloud anomaly checker. The ingest API accepts them from any of these.
 - **Long recordings.** Charts load up to 20,000 samples per session (about 3 minutes at 100 Hz) and downsample longer ones. The CSV export always contains every sample.
+- **Insole sample rate.** `five_fsr_toe_walking.ino` sets `SAMPLE_HZ = 20`, but `plot_fsr.py` says `SAMPLE_HZ = 200` and to keep the two in sync. The web app works from timestamps, so either rate is fine here. But the plotter's live buffer size depends on that constant.
+- **Toe-walking rule comment.** The `.ino` header says toe walking is flagged when "FSR4 and FSR5 never touched down". The code, `plot_fsr.py` and this app all check only the heel (FSR5); FSR4 counts as forefoot.
 - **Per-stride gait map (S3).** The session viewer shows the phase over time. A per-stride pressure map is not built yet.

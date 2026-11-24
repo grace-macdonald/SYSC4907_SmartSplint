@@ -32,20 +32,57 @@ def _lerp(a: float, b: float, t: float) -> float:
 PROFILES = [
     dict(pid="P-001", mass=71.0, weeks=6, level=(60, 25), wbl=(40, 70), anomalies=(6, 1),
          cv=(6.5, 2.4), cadence=(78, 104), emg=(0.35, 0.78), rom=(14, 27), load=(32, 66),
-         conf=(0.84, 0.95), safety=["low_battery"], password="demo-p001"),
+         conf=(0.84, 0.95), safety=["low_battery"], password="demo-p001"),  # no toe walking left by the end
     dict(pid="P-002", mass=95.0, weeks=4, level=(50, 35), wbl=(None, None), anomalies=(4, 2),
          cv=(5.0, 3.4), cadence=(84, 98), emg=(0.40, 0.62), rom=(16, 22), load=(45, 80),
-         conf=(0.86, 0.93), safety=["comm_loss"], password="demo-p002"),
+         conf=(0.86, 0.93), safety=["comm_loss"], password="demo-p002",
+         toe_walk_spans={0: [(41.0, 48.5)]}),
     dict(pid="P-003", mass=64.0, weeks=5, level=(45, 45), wbl=(35, 35), anomalies=(5, 6),
          cv=(6.0, 6.6), cadence=(80, 82), emg=(0.38, 0.42), rom=(15, 16), load=(30, 37),
          conf=(0.83, 0.81), safety=["plantar_overload", "plantar_overload", "sensor_dropout", "hardware_estop"],
-         password="demo-p003"),
+         password="demo-p003", toe_walk_spans={0: [(9.0, 16.0)], 1: [(18.0, 31.5), (44.0, 51.0)]}),
 ]
 
 
+def _bump(c: float, a: float, b: float) -> float:
+    """Half-sine from a to b on the stride fraction c, else 0."""
+    return math.sin(math.pi * (c - a) / (b - a)) if a < c < b else 0.0
+
+
+def _adc(v: float, rng: random.Random) -> int:
+    """Raw 12-bit FSR count: ~60-180 unloaded (below CONTACT_OFF), clipped to 0-4095."""
+    return max(0, min(domain.FSR_ADC_MAX, int(round(110 + v + rng.gauss(0, 25)))))
+
+
+def _insole(c: float, toe_walk: bool, rng: random.Random) -> dict:
+    """Five FSRs in raw ADC counts over one stride (heel strike at c = 0).
+
+    Normal gait loads the heel, then the lateral and medial forefoot, then the big
+    toe at push-off. Toe walking lands on the forefoot and the heel never loads.
+    """
+    if toe_walk:
+        return {
+            "fsr1": _adc(2600 * _bump(c, 0.10, 0.62), rng),
+            "fsr2": _adc(2700 * _bump(c, -0.02, 0.58), rng),
+            "fsr3": _adc(2500 * _bump(c, -0.02, 0.55), rng),
+            "fsr4": _adc(1700 * _bump(c, -0.02, 0.45), rng),
+            "fsr5": _adc(60 * _bump(c, 0.0, 0.3), rng),
+        }
+    return {
+        "fsr1": _adc(2800 * _bump(c, 0.35, 0.62), rng),
+        "fsr2": _adc(2400 * _bump(c, 0.20, 0.60), rng),
+        "fsr3": _adc(2200 * _bump(c, 0.18, 0.58), rng),
+        "fsr4": _adc(1600 * _bump(c, 0.08, 0.50), rng),
+        "fsr5": _adc(3000 * _bump(c, -0.02, 0.35), rng),
+    }
+
+
 def _gait_samples(rng: random.Random, seconds: float, hz: int, ref_torque: float, cadence: float,
-                  quality: float) -> tuple[list[dict], list[float]]:
-    """Synthetic synchronised samples. Returns (samples, stride start times in s)."""
+                  quality: float, toe_walk_spans: list[tuple[float, float]] = ()) -> tuple[list[dict], list[float]]:
+    """Synthetic synchronised samples. Returns (samples, stride start times in s).
+
+    Strides that start inside a toe_walk_spans (start_s, end_s) interval are toe-walked.
+    """
     samples = []
     stride_starts = []
     t = 0.0
@@ -56,6 +93,7 @@ def _gait_samples(rng: random.Random, seconds: float, hz: int, ref_torque: float
         stride_starts.append(t)
         n = int(period * hz)
         weak = rng.random() > quality + 0.15
+        toe_walk = any(a <= t < b for a, b in toe_walk_spans)
         for i in range(n):
             ts = t + i * dt
             if ts >= seconds:
@@ -67,10 +105,6 @@ def _gait_samples(rng: random.Random, seconds: float, hz: int, ref_torque: float
                 phase = "push_off"
             else:
                 phase = "swing"
-            heel = max(0.0, math.sin(math.pi * min(c / 0.35, 1))) if c < 0.35 else 0.0
-            lateral = max(0.0, math.sin(math.pi * (c - 0.08) / 0.42)) * 0.6 if 0.08 < c < 0.5 else 0.0
-            medial = max(0.0, math.sin(math.pi * (c - 0.2) / 0.4)) * 0.8 if 0.2 < c < 0.6 else 0.0
-            toe = max(0.0, math.sin(math.pi * (c - 0.35) / 0.27)) if 0.35 < c < 0.62 else 0.0
             if c < 0.45:
                 angle = _lerp(-3, 10, c / 0.45)
             elif c < 0.62:
@@ -88,10 +122,7 @@ def _gait_samples(rng: random.Random, seconds: float, hz: int, ref_torque: float
             conf = min(1.0, max(0.0, rng.gauss(0.6 + 0.35 * quality, 0.05)))
             s = {
                 "t_ms": int(round(ts * 1000)),
-                "fsr_heel": round(heel + rng.gauss(0, 0.02), 3),
-                "fsr_medial": round(medial + rng.gauss(0, 0.02), 3),
-                "fsr_lateral": round(lateral + rng.gauss(0, 0.02), 3),
-                "fsr_toe": round(toe + rng.gauss(0, 0.02), 3),
+                **_insole(c, toe_walk, rng),
                 "emg": round(max(0.0, emg + rng.gauss(0, 0.04)), 3),
                 "imu_foot_pitch": round(angle * 1.4 + rng.gauss(0, 0.5), 2),
                 "imu_foot_gyro": round(math.cos(2 * math.pi * c) * 180 + rng.gauss(0, 8), 1),
@@ -208,9 +239,14 @@ def seed_demo(now: datetime | None = None) -> str:
                    (prev_level, max(prof["level"]), prof["wbl"][1], 10 if pid == "P-003" else 15, pid))
 
         # Raw synchronised samples for the two most recent sessions (60 s at 100 Hz each).
-        for sid, s_start, minutes, level, ref, cadence, quality, frac in session_ids[-2:]:
-            samples, _ = _gait_samples(rng, 60, 100, ref or 0.0, cadence, quality)
+        # Toe walking in these comes from the insole signals: the server-side check
+        # (foot_anomaly.py) flags it, exactly as for real uploads.
+        spans = prof.get("toe_walk_spans", {})
+        for j, (sid, s_start, minutes, level, ref, cadence, quality, frac) in enumerate(session_ids[-2:]):
+            samples, _ = _gait_samples(rng, 60, 100, ref or 0.0, cadence, quality, spans.get(j, ()))
             service.insert_samples(sid, samples)
+            db.execute("DELETE FROM events WHERE session_id = ? AND type = 'toe_walking'", (sid,))
+            service.record_toe_walking(sid)
 
     # A participant who has just been enrolled: consented, calibration walk only.
     service.create_participant(body_mass_kg=78.0, pid="P-004", password="demo-p004")

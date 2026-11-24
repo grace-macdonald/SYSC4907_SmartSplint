@@ -246,8 +246,10 @@ SESSION_SUMMARY_FIELDS = (
     "push_off_torque_nm", "emg_peak_norm", "rom_deg", "assist_active_pct", "model_confidence_mean",
 )
 
+# FSR columns come from domain.FSR_SENSORS, so adding the 6th sensor there adds it
+# to ingest, storage, the CSV export and the charts.
 SAMPLE_FIELDS = (
-    "t_ms", "fsr_heel", "fsr_medial", "fsr_lateral", "fsr_toe", "emg",
+    "t_ms", *domain.FSR_KEYS, "emg",
     "imu_foot_pitch", "imu_foot_gyro", "imu_shank_pitch", "imu_shank_gyro",
     "ankle_angle_deg", "hinge_torque_nm", "gait_phase", "phase_confidence", "valid",
 )
@@ -291,6 +293,10 @@ def insert_samples(sid: int, samples: list[dict]) -> int:
         phase = s.get("gait_phase")
         if phase not in (None, "stance", "push_off", "swing"):
             raise ValidationError(f"Sample {i}: gait_phase must be stance, push_off, swing or null.")
+        for k in domain.FSR_KEYS:
+            v = s.get(k)
+            if v is not None and (not isinstance(v, int) or isinstance(v, bool) or not 0 <= v <= domain.FSR_ADC_MAX):
+                raise ValidationError(f"Sample {i}: {k} must be a raw ADC count from 0 to {domain.FSR_ADC_MAX}, or null.")
         rows.append(tuple([sid] + [s.get(f) if f != "valid" else int(s.get("valid", 1)) for f in SAMPLE_FIELDS]))
     db = get_db()
     placeholders = ",".join("?" * (len(SAMPLE_FIELDS) + 1))
@@ -300,3 +306,38 @@ def insert_samples(sid: int, samples: list[dict]) -> int:
         db.rollback()
         raise ValidationError("Duplicate t_ms in this session.") from exc
     return len(rows)
+
+
+def foot_check(sid: int) -> dict:
+    """Run the toe-walking check over a session's full-resolution samples."""
+    from .foot_anomaly import check_samples, summarise
+    return summarise(check_samples(get_samples(sid)))
+
+
+def record_toe_walking(sid: int) -> int:
+    """Create a toe_walking event for each flagged window not already logged.
+
+    Idempotent: windows are fixed by the first sample, so re-running after more
+    samples arrive only adds newly closed windows. Doesn't commit.
+    """
+    session = get_session(sid)
+    summary = foot_check(sid)
+    db = get_db()
+    existing = {
+        json.loads(r["detail"]).get("window_start_ms")
+        for r in db.execute("SELECT detail FROM events WHERE session_id = ? AND type = 'toe_walking' "
+                            "AND detail LIKE '%window_start_ms%'", (sid,)).fetchall()
+    }
+    started = datetime.fromisoformat(session["started_at"].replace("Z", "+00:00"))
+    added = 0
+    for w in summary["flagged"]:
+        if w["start_ms"] in existing:
+            continue
+        at = (started + timedelta(milliseconds=w["end_ms"])).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+        record_event(session["participant_id"], "anomaly", "toe_walking", {
+            "source": "server", "window_start_ms": w["start_ms"], "window_end_ms": w["end_ms"],
+            "window_s": summary["window_s"], "heel_sensor": summary["heel_sensor"],
+            "contact_on": summary["contact_on"],
+        }, session_id=sid, occurred_at=at, commit=False)
+        added += 1
+    return added

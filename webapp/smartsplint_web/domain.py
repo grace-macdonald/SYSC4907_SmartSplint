@@ -26,11 +26,30 @@ RETENTION_DAYS = 365
 
 CONSENT_VERSION = "2026-11"
 
+# ---------------------------------------------------------------- insole (FootAnomaly)
+# Matches FootAnomaly/five_fsr_toe_walking.ino and plot_fsr.py on dev-footanomaly.
+# Numbering is the red numbers on the team's foot map.
+# To add the 6th FSR: append one entry here (the samples table already has fsr6),
+# and check whether it should count as "heel" in the toe-walking rule below.
+FSR_SENSORS: list[tuple[str, str, str]] = [   # (column, short label, location)
+    ("fsr1", "FSR1", "Big toe"),
+    ("fsr2", "FSR2", "1st metatarsal"),
+    ("fsr3", "FSR3", "2nd/3rd metatarsal"),
+    ("fsr4", "FSR4", "5th metatarsal"),
+    ("fsr5", "FSR5", "Heel"),
+]
+FSR_KEYS = [k for k, _, _ in FSR_SENSORS]
+HEEL_SENSOR = "fsr5"
+FSR_ADC_MAX = 4095          # 12-bit ADC, analogReadResolution(12)
+CONTACT_ON = 480            # raw ADC: rise above -> contact
+CONTACT_OFF = 320           # raw ADC: fall below -> released (hysteresis)
+TOE_WALK_WINDOW_MS = 5000   # WINDOW_MS in the .ino, WINDOW_S in plot_fsr.py
+
 # Event catalogue. category -> type -> (label, default severity, patient-facing text)
 EVENT_TYPES: dict[str, dict[str, tuple[str, str, str]]] = {
     "anomaly": {  # P9 (+ S1 weak push-off)
         "toe_walking": ("Toe walking", "warning",
-                        "You were walking on your toes. Try to land on your heel first."),
+                        "Your heel didn't touch the ground for a while. Try to land on your heel first."),
         "toe_dragging": ("Toe dragging", "warning",
                          "Your toes were catching the ground during swing. Try to lift your foot a little more."),
         "stride_variation": ("Stride-to-stride variation", "warning",

@@ -37,7 +37,26 @@ def close_db(_exc: BaseException | None = None) -> None:
 
 
 def init_db(conn: sqlite3.Connection) -> None:
+    _migrate(conn)
     conn.executescript(SCHEMA_PATH.read_text())
+    conn.commit()
+
+
+def _migrate(conn: sqlite3.Connection) -> None:
+    """Bring databases from the first web app version up to the 5-FSR insole layout.
+
+    The first version guessed four insole regions (fsr_heel, fsr_medial, fsr_lateral,
+    fsr_toe) on a 0-1 scale. Those were only ever demo values, so old rows are kept
+    but moved to the closest new sensor; reload the demo with `init-demo --reset`
+    to get realistic raw ADC values.
+    """
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(samples)").fetchall()}
+    if "fsr_heel" not in cols:
+        return
+    for old, new in (("fsr_toe", "fsr1"), ("fsr_medial", "fsr2"), ("fsr_lateral", "fsr4"), ("fsr_heel", "fsr5")):
+        conn.execute(f"ALTER TABLE samples RENAME COLUMN {old} TO {new}")
+    for new in ("fsr3", "fsr6"):
+        conn.execute(f"ALTER TABLE samples ADD COLUMN {new} INTEGER")
     conn.commit()
 
 

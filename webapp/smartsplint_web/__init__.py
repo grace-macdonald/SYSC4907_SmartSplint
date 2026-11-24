@@ -113,6 +113,24 @@ def _register_cli(app: Flask) -> None:
         conn.commit()
         click.echo(f"Device token for {participant_id} (store it on the brace; it won't be shown again):\n{token}")
 
+    @app.cli.command("import-fsr-csv")
+    @click.argument("participant_id")
+    @click.argument("csv_path", type=click.Path(exists=True, dir_okay=False))
+    @click.option("--started-at", default=None, help="ISO-8601 start time; defaults to file time minus duration")
+    @click.option("--kind", type=click.Choice(["walk", "calibration", "bench"]), default="walk")
+    @click.option("--no-detect", is_flag=True, help="Don't run the toe-walking check")
+    def import_fsr_csv(participant_id, csv_path, started_at, kind, no_detect):
+        """Import a FootAnomaly/plot_fsr.py raw recording (pc_time_s, t_us, fsr1..fsr5)."""
+        from datetime import datetime
+        from .importer import import_plot_fsr_csv
+        start = datetime.fromisoformat(started_at.replace("Z", "+00:00")) if started_at else None
+        if start is not None and start.tzinfo is None:
+            start = start.astimezone()  # local time, as typed
+        try:
+            click.echo(import_plot_fsr_csv(participant_id, csv_path, start, kind, not no_detect))
+        except service.ValidationError as exc:
+            raise click.ClickException(str(exc)) from exc
+
     @app.cli.command("purge-expired")
     def purge_expired():
         """Delete sessions and events older than 12 months."""

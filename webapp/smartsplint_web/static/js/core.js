@@ -117,6 +117,10 @@ export function eventItem(ev, { patient = false, onAck } = {}) {
     meta.push(`${ev.detail.from ?? "—"}${unit} → ${ev.detail.to}${unit}`);
   }
   if (ev.detail?.bout_strides) meta.push(`${ev.detail.bout_strides} strides`);
+  if (ev.detail?.window_start_ms !== undefined) {
+    meta.push(`${fmt.num(ev.detail.window_start_ms / 1000, 1)}–${fmt.num(ev.detail.window_end_ms / 1000, 1)} s into the session`);
+    if (!patient) meta.push(`heel (${(ev.detail.heel_sensor || "fsr5").toUpperCase()}) never above ${ev.detail.contact_on ?? 480}`);
+  }
   if (ev.detail?.plantar_load_kg) meta.push(`${ev.detail.plantar_load_kg} kg (limit ${ev.detail.limit_kg} kg)`);
   if (ev.type === "app_estop" && ev.detail) meta.push(ev.detail.ble_delivered ? "stop delivered to brace" : "not confirmed by brace");
   if (ev.detail?.changes) meta.push(Object.keys(ev.detail.changes).map((k) => k.replace(/_/g, " ")).join(", "));

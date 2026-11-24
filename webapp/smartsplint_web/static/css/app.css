@@ -20,9 +20,11 @@
   --series-2: #eb6834;
   --series-3: #1baf7a;
   --series-4: #eda100;
-  --phase-stance: #e87ba4;
-  --phase-push: #008300;
-  --phase-swing: #6250d6;
+  --series-5: #e87ba4;
+  /* Gait phases use neutral steps so they never compete with the five FSR hues. */
+  --phase-stance: #a9a79f;
+  --phase-push: #52514e;
+  --phase-swing: #d0cec5;
 
   --good: #0ca30c;
   --good-ink: #006300;
@@ -56,9 +58,10 @@
     --series-2: #d95926;
     --series-3: #199e70;
     --series-4: #c98500;
-    --phase-stance: #d55181;
-    --phase-push: #008300;
-    --phase-swing: #9085e9;
+    --series-5: #d55181;
+    --phase-stance: #77756e;
+    --phase-push: #c3c2b7;
+    --phase-swing: #3a3a37;
     --good-ink: #0ca30c;
     --critical-ink: #ef7b7b;
     --critical-wash: rgba(208, 59, 59, 0.16);
@@ -270,6 +273,11 @@ tbody tr:last-child td { border-bottom: 0; }
 .chart .threshold-label { font-size: 11px; fill: var(--ink-2); }
 .chart .end-label { font-size: 11px; fill: var(--ink-2); }
 .chart .phase-label { font-size: 10px; font-weight: 600; }
+.chart .span-label { font-size: 10px; font-weight: 600; fill: var(--critical-ink); }
+.insole { display: grid; gap: 2px; }
+.insole .sensor-label { display: flex; align-items: center; gap: 6px; font-size: 0.78rem; color: var(--ink-2); margin: 6px 0 0 40px; }
+.insole .sensor-label i { width: 12px; height: 2px; border-radius: 1px; }
+.insole .sensor-label b { color: var(--ink); font-weight: 600; }
 .chart-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 0.8rem; color: var(--ink-2); }
 .chart-legend span { display: inline-flex; align-items: center; gap: 6px; }
 .chart-legend i { display: inline-block; width: 14px; height: 2px; border-radius: 1px; }

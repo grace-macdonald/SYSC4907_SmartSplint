@@ -144,9 +144,9 @@ def test_ingest_session_and_csv_export(app):
     consent(app, "P-001")
     dev = device_token(app, "P-001")
     samples = [
-        {"t_ms": 0, "fsr_heel": 0.9, "emg": 0.1, "gait_phase": "stance", "phase_confidence": 0.95},
-        {"t_ms": 10, "fsr_heel": 0.8, "emg": None, "gait_phase": "stance", "phase_confidence": 0.94},
-        {"t_ms": 20, "fsr_heel": 0.7, "emg": 0.2, "gait_phase": None, "valid": 0},
+        {"t_ms": 0, "fsr5": 3000, "emg": 0.1, "gait_phase": "stance", "phase_confidence": 0.95},
+        {"t_ms": 10, "fsr5": 2800, "emg": None, "gait_phase": "stance", "phase_confidence": 0.94},
+        {"t_ms": 20, "fsr5": 2500, "emg": 0.2, "gait_phase": None, "valid": 0},
     ]
     c = app.test_client()
     r = c.post("/api/ingest/sessions", headers=dev, json={
@@ -154,7 +154,7 @@ def test_ingest_session_and_csv_export(app):
     assert r.status_code == 201, r.data
     sid = r.get_json()["session_id"]
 
-    r = c.post(f"/api/ingest/sessions/{sid}/samples", headers=dev, json={"samples": [{"t_ms": 30, "fsr_heel": 0.1}]})
+    r = c.post(f"/api/ingest/sessions/{sid}/samples", headers=dev, json={"samples": [{"t_ms": 30, "fsr5": 150}]})
     assert r.get_json()["samples_stored"] == 1
 
     doc = login(app, "doc", "pw")

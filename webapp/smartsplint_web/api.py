@@ -7,7 +7,7 @@ import io
 
 from flask import Blueprint, Response, abort, g, jsonify, request
 
-from . import service
+from . import domain, service
 from .auth import clinician_required, login_required, require_participant_access
 from .db import get_db, utcnow
 
@@ -166,6 +166,14 @@ def session_detail(sid):
         samples=service.get_samples(sid, max_points=max_points),
         events=[service.event_view(e) for e in get_db().execute(
             "SELECT * FROM events WHERE session_id = ? ORDER BY occurred_at", (sid,)).fetchall()],
+        foot_check=service.foot_check(sid),   # always on full-resolution samples
+        insole={
+            "sensors": [{"key": k, "label": lab, "location": loc} for k, lab, loc in domain.FSR_SENSORS],
+            "heel_sensor": domain.HEEL_SENSOR,
+            "adc_max": domain.FSR_ADC_MAX,
+            "contact_on": domain.CONTACT_ON,
+            "contact_off": domain.CONTACT_OFF,
+        },
     )
 
 
